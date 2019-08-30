@@ -1,6 +1,7 @@
 import mmcv
 import numpy as np
 from numpy import random
+from scipy.ndimage.filters import gaussian_filter
 
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
 
@@ -125,8 +126,8 @@ class RandomCrop(object):
                 # center of boxes should inside the crop img
                 center = (boxes[:, :2] + boxes[:, 2:]) / 2
                 mask = (center[:, 0] > patch[0]) * (
-                    center[:, 1] > patch[1]) * (center[:, 0] < patch[2]) * (
-                        center[:, 1] < patch[3])
+                        center[:, 1] > patch[1]) * (center[:, 0] < patch[2]) * (
+                               center[:, 1] < patch[3])
                 if not mask.any():
                     continue
                 boxes = boxes[mask]
@@ -141,12 +142,44 @@ class RandomCrop(object):
                 return img, boxes, labels
 
 
+class RandomNoise(object):
+
+    def __init__(self, standard_deviation=1):
+        self.std = standard_deviation
+
+    def __call__(self, img, boxes, labels):
+        if random.random() < 0.5:
+            return img, boxes, labels
+
+        noise = np.random.normal(scale=self.std, size=img.shape)
+        img = (img + noise).astype(img.dtype)
+
+        return img, boxes, labels
+
+
+class GaussianBlur(object):
+
+    def __init__(self, sigma=1):
+        self.sigma = sigma
+
+    def __call__(self, img, boxes, labels):
+        if random.random() < 0.5:
+            return img, boxes, labels
+
+        sigma = random.uniform(0, self.sigma)
+        img = gaussian_filter(img, (sigma, sigma, 0))
+
+        return img, boxes, labels
+
+
 class ExtraAugmentation(object):
 
     def __init__(self,
                  photo_metric_distortion=None,
                  expand=None,
-                 random_crop=None):
+                 random_crop=None,
+                 random_noise=None,
+                 gaussian_blur=None):
         self.transforms = []
         if photo_metric_distortion is not None:
             self.transforms.append(
@@ -155,6 +188,10 @@ class ExtraAugmentation(object):
             self.transforms.append(Expand(**expand))
         if random_crop is not None:
             self.transforms.append(RandomCrop(**random_crop))
+        if random_noise is not None:
+            self.transforms.append(RandomNoise(**random_noise))
+        if gaussian_blur is not None:
+            self.transforms.append(GaussianBlur(**gaussian_blur))
 
     def __call__(self, img, boxes, labels):
         img = img.astype(np.float32)
